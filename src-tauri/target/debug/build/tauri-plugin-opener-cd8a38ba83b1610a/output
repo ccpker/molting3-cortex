@@ -1,0 +1,11 @@
+cargo:rerun-if-changed=permissions
+cargo:PERMISSION_FILES_PATH=D:\workspaces\dev\projects\molting3-cortex\src-tauri\target\debug\build\tauri-plugin-opener-cd8a38ba83b1610a\out\tauri-plugin-opener-permission-files
+cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+cargo:GLOBAL_SCOPE_SCHEMA_PATH=D:\workspaces\dev\projects\molting3-cortex\src-tauri\target\debug\build\tauri-plugin-opener-cd8a38ba83b1610a\out\global-scope.json
+cargo:GLOBAL_API_SCRIPT_PATH=\\?\C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\tauri-plugin-opener-2.5.4\api-iife.js
+cargo:rustc-check-cfg=cfg(mobile)
+cargo:rustc-check-cfg=cfg(desktop)
+cargo:rustc-cfg=desktop
+cargo:rustc-check-cfg=cfg(desktop)
+cargo:rustc-cfg=desktop
+cargo:rustc-check-cfg=cfg(mobile)

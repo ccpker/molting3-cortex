@@ -1,0 +1,8 @@
+D:\workspaces\dev\projects\molting3-cortex\src-tauri\target\debug\deps\icu_normalizer-a0b324963829ecdb.d: C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\lib.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\properties.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\provider.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\uts46.rs
+
+D:\workspaces\dev\projects\molting3-cortex\src-tauri\target\debug\deps\libicu_normalizer-a0b324963829ecdb.rmeta: C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\lib.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\properties.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\provider.rs C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\uts46.rs
+
+C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\lib.rs:
+C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\properties.rs:
+C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\provider.rs:
+C:\Users\midou(office)\.cargo\registry\src\mirrors.ustc.edu.cn-38d0e5eb5da2abae\icu_normalizer-2.2.0\src\uts46.rs:
