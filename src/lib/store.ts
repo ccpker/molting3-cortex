@@ -2,10 +2,13 @@ import { create } from "zustand";
 import type { AppState, Module, View, ViewMode } from "@/types/module";
 
 interface AppStore extends AppState {
+  activeViewId: string | null;
+
   // 视图切换
   setViewMode: (mode: ViewMode) => void;
   setActiveBullet: (bullet: string | null) => void;
   setActiveModule: (id: string | null) => void;
+  setActiveViewId: (id: string) => void;
 
   // 模块管理
   loadModules: (modules: Module[]) => void;
@@ -17,6 +20,7 @@ export const useAppStore = create<AppStore>((set) => ({
   viewMode: "dashboard",
   activeBullet: null,
   activeModule: null,
+  activeViewId: null,
   modules: new Map(),
   views: new Map(),
   bullets: [],
@@ -24,6 +28,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setViewMode: (mode) => set({ viewMode: mode }),
   setActiveBullet: (bullet) => set({ activeBullet: bullet, viewMode: bullet ? "bullet" : "dashboard" }),
   setActiveModule: (id) => set({ activeModule: id }),
+  setActiveViewId: (id) => set({ activeViewId: id }),
 
   loadModules: (modules) =>
     set((state) => {
