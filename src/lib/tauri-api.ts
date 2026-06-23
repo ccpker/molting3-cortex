@@ -8,6 +8,11 @@ export async function scanModules(dirPath: string): Promise<Module[]> {
   return invoke<Module[]>("scan_modules", { dirPath });
 }
 
+/** 扫描 workspace 中所有 _index 文件，将文件夹作为模块（新架构） */
+export async function scanIndexFiles(rootPath: string): Promise<Module[]> {
+  return invoke<Module[]>("scan_index_files", { rootPath });
+}
+
 /** 写入模块文件 */
 export async function writeModule(
   path: string,

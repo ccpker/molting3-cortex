@@ -1,8 +1,7 @@
 // 初始化载入 — 应用启动时加载模块和实时数据
 import type { View } from "@/types/module";
 import type { Module, LiveScan } from "@/types/module";
-import { DEV_MODULES } from "@/lib/dev-modules";
-import { scanModules } from "@/lib/tauri-api";
+import { scanIndexFiles } from "@/lib/tauri-api";
 
 export interface InitResult {
   modules: Module[];
@@ -11,140 +10,79 @@ export interface InitResult {
   liveScans: LiveScan[];
 }
 
-// 编程主管 11 个项目总览（开发模式）
-const DEV_VIEW_PROJECTS: View = {
-  id: "projects_master",
-  title: "编程主管 · 项目总览",
-  layout: "grid",
-  zones: [
-    {
-      title: "🧠 中枢",
-      modules: ["status_cortex_hub"],
-    },
-    {
-      title: "🚀 活跃项目",
-      modules: [
-        "status_bookmarks",
-        "status_weather",
-        "status_code_channel",
-      ],
-    },
-    {
-      title: "🔄 运行中 & 维护",
-      modules: [
-        "status_mdreader",
-        "status_scripts",
-        "status_clouddrive",
-      ],
-    },
-    {
-      title: "📋 需求阶段",
-      modules: [
-        "status_contacts",
-        "status_mobile",
-        "status_qclaw_alt",
-        "status_image_enhance",
-      ],
-    },
-  ],
-};
+// ─── 视图定义 — 基于 _index 扫描结果动态生成 ───
 
-// 天气APP架构视图（开发模式）
-const DEV_VIEW_WEATHER: View = {
-  id: "weather_arch",
-  title: "米豆天气 · 架构建模",
-  layout: "grid",
-  zones: [
-    {
-      title: "🌤️ 项目总览",
-      modules: ["status_midou_weather"],
-    },
-    {
-      title: "⚡ 数据源层",
-      modules: [
-        "status_five_source_fusion",
-        "status_qweather",
-        "status_caiyun",
-        "status_openmeteo",
-        "status_amap",
-        "status_cma",
-      ],
-    },
-    {
-      title: "🏗️ 页面与组件",
-      modules: [
-        "status_5tab_arch",
-        "status_custompage",
-        "status_caiyunpage",
-        "status_qweatherpage",
-        "status_attack_timeline",
-        "status_rhythm_bar",
-      ],
-    },
-    {
-      title: "🔧 基础设施 & 决策",
-      modules: [
-        "status_http_client",
-        "output_key_files",
-        "topic_weight_algo",
-        "topic_cors_solution",
-      ],
-    },
-  ],
-};
+/** 从 _index 模块列表构建视图 zones */
+function buildView(
+  id: string,
+  title: string,
+  modules: Module[],
+  zoneRules: { zone: string; match: (m: Module) => boolean }[],
+): View {
+  const zones = zoneRules.map(rule => ({
+    title: rule.zone,
+    modules: modules.filter(rule.match).map(m => m.meta.id),
+  })).filter(z => z.modules.length > 0);
+
+  // 未匹配的放「其他」
+  const matched = new Set(zones.flatMap(z => z.modules));
+  const rest = modules.filter(m => !matched.has(m.meta.id)).map(m => m.meta.id);
+  if (rest.length > 0) {
+    zones.push({ title: "📦 其他", modules: rest });
+  }
+
+  return { id, title, layout: "grid" as const, zones };
+}
 
 /**
  * 加载所有数据源
- * 优先级: 模块文件 > 视图定义 > 实时扫描
+ * 优先级: _index 文件扫描 > 视图构建 > 实时扫描
  *
- * 开发模式（无Tauri）：使用预编译的 DEV_MODULES
- * 生产模式（Tauri）：扫描物理目录
+ * Tauri 模式：Rust scan_index_files 扫 workspace 下所有 _index
+ * 浏览器模式（无Tauri）：回退
  */
 export async function loadAll(): Promise<InitResult> {
-  // Tauri 2.0 检测：__TAURI_INTERNALS__ 全局变量
-  // (Tauri 1.0 用 __TAURI__，本项目是 Tauri 2.0)
   const hasTauri = typeof window !== "undefined"
     && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
   if (!hasTauri) {
-    console.log("[loader] browser mode — no Tauri runtime, using DEV_MODULES (" + DEV_MODULES.length + " modules)");
-    return {
-      modules: DEV_MODULES,
-      views: [DEV_VIEW_PROJECTS, DEV_VIEW_WEATHER],
-      bulletNames: ["编程主管", "米豆天气"],
-      liveScans: [],
-    };
+    console.log("[loader] browser mode — no _index scan available, returning empty");
+    return { modules: [], views: [], bulletNames: ["编程主管"], liveScans: [] };
   }
 
-  // ─── Tauri 生产模式：Rust 真扫描 ───
-  console.log("[loader] Tauri v2 detected, starting scan pipeline");
+  // ─── Tauri 生产模式：Rust 扫 _index ───
+  console.log("[loader] Tauri v2 detected, scanning _index files");
 
-  // 1. 扫描模块 — 使用绝对路径，防止 CWD 不在项目根
-  //    加 5s 超时：Rust 崩了不会永久挂起前端
-  const moduleRoot = "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules";
-  console.log(`[loader] scanModules dir: ${moduleRoot}`);
+  const workspaceRoot = "D:\\workspaces\\dev";
   let modules: Module[] = [];
   try {
     const t0 = performance.now();
     modules = await Promise.race([
-      scanModules(moduleRoot),
+      scanIndexFiles(workspaceRoot),
       new Promise<Module[]>((_, rej) =>
-        setTimeout(() => rej(new Error("scanModules 5s timeout")), 5000)
+        setTimeout(() => rej(new Error("scanIndexFiles 5s timeout")), 5000)
       ),
     ]);
     const t1 = performance.now();
-    console.log(`[loader] scanModules OK — ${modules.length} modules in ${(t1 - t0).toFixed(0)}ms`);
+    console.log(
+      `[loader] scanIndexFiles OK — ${modules.length} modules in ${(t1 - t0).toFixed(0)}ms`
+    );
   } catch (e: any) {
-    console.error(`[loader] scanModules FAILED:`, e?.message ?? e);
-    console.log("[loader] falling back to DEV_MODULES");
-    modules = DEV_MODULES;
+    console.error("[loader] scanIndexFiles FAILED:", e?.message ?? e);
+    return { modules: [], views: [], bulletNames: ["编程主管"], liveScans: [] };
   }
 
-  // 2. 视图定义（TODO: 从 views/ 目录扫描）
-  const views: View[] = [DEV_VIEW_PROJECTS, DEV_VIEW_WEATHER];
+  // 构建视图 — 按类型分 Zone
+  const views: View[] = [
+    buildView("workspace_map", "编程主管 · 工作区地图", modules, [
+      { zone: "🧠 定义层", match: m => m.meta.tags?.includes("定义") ?? false },
+      { zone: "📋 日志层", match: m => m.meta.tags?.some(t => t.startsWith("日志")) ?? false },
+      { zone: "🚀 项目空间", match: m => m.meta.tags?.some(t => t.startsWith("项目")) ?? false },
+      { zone: "🗄️ 档案层", match: m => m.meta.tags?.some(t => t.startsWith("档案")) ?? false },
+    ]),
+  ];
 
-  // 3. Live scan (TODO: 启用 scan_live)
+  const bulletNames = ["编程主管"];
   const liveScans: LiveScan[] = [];
-
-  return { modules, views, bulletNames: ["编程主管", "米豆天气"], liveScans };
+  return { modules, views, bulletNames, liveScans };
 }

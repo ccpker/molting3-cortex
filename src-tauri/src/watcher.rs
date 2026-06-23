@@ -46,14 +46,21 @@ pub fn start_watching(app: &AppHandle, watch_dir: PathBuf) -> Result<WatcherGuar
                     };
 
                     for p in e.paths {
-                        // 只关心 .md 文件
-                        if p.extension().map(|ext| ext == "md").unwrap_or(false) {
-                            let path_str = p.to_string_lossy().to_string();
-                            let _ = app_handle.emit("file-change", FileChangeEvent {
-                                path: path_str,
-                                kind: kind.to_string(),
-                            });
+                        // 只关心 _index 文件的变更
+                        let is_index = p.file_name()
+                            .map(|n| n == "_index")
+                            .unwrap_or(false);
+                        if !is_index {
+                            continue;
                         }
+                        let path_str = p.parent()
+                            .unwrap_or(&p)
+                            .to_string_lossy()
+                            .to_string();
+                        let _ = app_handle.emit("file-change", FileChangeEvent {
+                            path: path_str,
+                            kind: kind.to_string(),
+                        });
                     }
                 }
                 Err(e) => {

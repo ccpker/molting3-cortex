@@ -72,6 +72,168 @@ fn scan_modules(dir_path: String) -> Result<Vec<Module>, String> {
     Ok(modules)
 }
 
+/// 扫描真实目录中的 _index 文件，将文件夹作为模块（新架构核心）
+#[tauri::command]
+fn scan_index_files(root_path: String) -> Result<Vec<Module>, String> {
+    let root = std::path::Path::new(&root_path);
+    if !root.exists() || !root.is_dir() {
+        return Err(format!("path not found or not a directory: {}", root_path));
+    }
+    let mut modules = Vec::new();
+    scan_index_recursive(root, &mut modules, root)?;
+    Ok(modules)
+}
+
+/// 递归扫描 _index 文件，每个包含 _index 的目录 = 一个模块
+fn scan_index_recursive(
+    dir: &std::path::Path,
+    modules: &mut Vec<Module>,
+    workspace_root: &std::path::Path,
+) -> Result<(), String> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+
+    let index_path = dir.join("_index");
+    if index_path.exists() {
+        if let Some(mut module) = parse_index_file(&index_path, dir, workspace_root) {
+            // 子目录中的 _index = children
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                let children: Vec<String> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().join("_index").exists())
+                    .map(|e| {
+                        e.path()
+                            .strip_prefix(workspace_root)
+                            .unwrap_or(&e.path())
+                            .to_string_lossy()
+                            .to_string()
+                    })
+                    .collect();
+                if !children.is_empty() {
+                    if let Some(ref mut existing) = module.meta.children {
+                        for c in children {
+                            if !existing.contains(&c) {
+                                existing.push(c);
+                            }
+                        }
+                    } else {
+                        module.meta.children = Some(children);
+                    }
+                }
+            }
+            modules.push(module);
+        }
+    }
+
+    // 继续递归子目录
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                // 跳过隐藏、node_modules、.git
+                if !name.starts_with('.') && name != "node_modules" && name != "target" {
+                    scan_index_recursive(&path, modules, workspace_root)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 解析一个 _index 文件
+fn parse_index_file(
+    path: &std::path::Path,
+    dir: &std::path::Path,
+    workspace_root: &std::path::Path,
+) -> Option<Module> {
+    let content = std::fs::read_to_string(path).ok()?;
+
+    let rel_path = dir.strip_prefix(workspace_root).unwrap_or(dir).to_string_lossy().to_string();
+    let dir_name = dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    let mut meta = ModuleMeta {
+        id: format!("idx_{}", rel_path.replace(['\\', '/', ':', ' '], "_")),
+        module_type: "status_card".to_string(),
+        title: dir_name.clone(),
+        bullet: None,
+        tags: None,
+        created: String::new(),
+        updated: String::new(),
+        children: None,
+        links: None,
+        pinned: None,
+        live: None,
+    };
+
+    let mut body_lines: Vec<String> = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            if !line.starts_with('#') {
+                body_lines.push(line.to_string());
+            }
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once(':') {
+            let key = key.trim();
+            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+
+            match key {
+                "type" => meta.module_type = value.to_string(),
+                "bullet" => meta.bullet = Some(value.to_string()),
+                "title" => meta.title = value.to_string(),
+                "tags" => {
+                    meta.tags = Some(
+                        value
+                            .trim_matches(|c| c == '[' || c == ']')
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect(),
+                    );
+                }
+                "children" | "links" => {
+                    // 这些在后续行中以 `  - xxx` 格式出现
+                }
+                _ => body_lines.push(line.to_string()),
+            }
+        } else if line.starts_with("- ") {
+            // 可能是 children 或 links 的列表项 —— 暂存到 body，等 children/links 自动发现
+            body_lines.push(line.to_string());
+        }
+    }
+
+    // 从文件系统获取时间
+    if let Ok(metadata) = std::fs::metadata(dir) {
+        if let Ok(modified) = metadata.modified() {
+            let t = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            meta.updated = chrono_like_format(t);
+            meta.created = meta.updated.clone();
+        }
+    }
+
+    if meta.id == format!("idx_{}", rel_path.replace(['\\', '/', ':', ' '], "_")) {
+        // 用相对路径做 id
+    }
+
+    Some(Module {
+        meta,
+        body: body_lines.join("\n"),
+        source_path: rel_path,
+    })
+}
+
 fn scan_md_files(dir: &std::path::Path, modules: &mut Vec<Module>) -> Result<(), String> {
     if !dir.is_dir() {
         return Ok(());
@@ -428,23 +590,18 @@ fn rebuild_graph(
     app: tauri::AppHandle,
     graph: tauri::State<'_, Mutex<dep_graph::DepGraph>>,
 ) -> Result<serde_json::Value, String> {
-    let modules_dir = std::path::PathBuf::from(
-        "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules"
-    );
-    if !modules_dir.exists() {
-        return Err("modules dir not found".into());
+    let workspace_root = std::path::PathBuf::from("D:\\workspaces\\dev");
+    if !workspace_root.exists() {
+        return Err("workspace not found".into());
     }
     let mut modules = Vec::new();
-    scan_md_files(&modules_dir, &mut modules).ok();
+    scan_index_recursive(&workspace_root, &mut modules, &workspace_root).ok();
     let new_graph = dep_graph::DepGraph::build(&modules);
 
     let mut old = graph.lock().map_err(|e| e.to_string())?;
     let diff = new_graph.diff(&old);
 
-    // 推送变更事件到前端
     let _ = app.emit("graph-changed", &diff);
-
-    // 替换旧图
     *old = new_graph;
 
     Ok(serde_json::json!({
@@ -463,6 +620,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_modules,
+            scan_index_files,
             write_module,
             scan_live,
             query_deps,
@@ -471,35 +629,32 @@ pub fn run() {
             rebuild_graph,
         ])
         .setup(|app| {
-            // 构建全局依赖图（通过 scan_modules 的结果初始化）
-            let modules_dir = std::path::PathBuf::from(
-                "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules"
-            );
-            if modules_dir.exists() {
-                // 启动时扫描一次，构建依赖图
-                if let Ok(file_modules) = scan_modules(
-                    modules_dir.to_string_lossy().to_string()
-                ) {
-                    let graph = dep_graph::DepGraph::build(&file_modules);
-                    println!(
-                        "[dep_graph] built with {} modules",
-                        graph.module_count()
-                    );
-                    app.manage(Mutex::new(graph));
-                }
+            // 启动时扫描 workspace _index 文件，构建依赖图
+            let workspace_root = std::path::PathBuf::from("D:\\workspaces\\dev");
+            if workspace_root.exists() {
+                let mut modules = Vec::new();
+                scan_index_recursive(&workspace_root, &mut modules, &workspace_root).ok();
+                let graph = dep_graph::DepGraph::build(&modules);
+                println!(
+                    "[dep_graph] built with {} modules (from _index files)",
+                    graph.module_count()
+                );
+                app.manage(Mutex::new(graph));
+            } else {
+                app.manage(Mutex::new(dep_graph::DepGraph::default()));
             }
 
-            // 启动文件监听
-            if modules_dir.exists() {
-                match watcher::start_watching(&app.handle(), modules_dir.clone()) {
+            // 启动 workspace 文件监听
+            if workspace_root.exists() {
+                match watcher::start_watching(&app.handle(), workspace_root) {
                     Ok(guard) => {
                         app.manage(Mutex::new(Some(guard)));
-                        println!("[watcher] started");
+                        println!("[watcher] started — watching workspace root");
                     }
                     Err(e) => eprintln!("[watcher] failed to start: {}", e),
                 }
             } else {
-                eprintln!("[watcher] modules dir not found");
+                eprintln!("[watcher] workspace not found");
             }
             Ok(())
         })
