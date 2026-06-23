@@ -1,8 +1,8 @@
 ---
 module: true
-id: status_molting3_cortex
+id: status_cortex_hub
 type: status_card
-title: "molting3-cortex"
+title: "🧠 molting3-cortex 大脑中枢"
 bullet: "编程主管"
 tags: ["Tauri 2.0", "React 19", "TypeScript", "Zustand", "Tailwind 4"]
 created: "2026-06-18T18:00:00+08:00"

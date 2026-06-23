@@ -20,6 +20,7 @@ pub struct ModuleMeta {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Module {
     pub meta: ModuleMeta,
     pub body: String,
@@ -125,7 +126,7 @@ fn parse_module_file(path: &std::path::Path) -> Option<Module> {
                         value
                             .trim_matches(|c| c == '[' || c == ']')
                             .split(',')
-                            .map(|s| s.trim().to_string())
+                            .map(|s| s.trim().trim_matches(|c| c == '"' || c == '\'' || c == ' ').to_string())
                             .filter(|s| !s.is_empty())
                             .collect(),
                     );
@@ -152,6 +153,17 @@ fn parse_module_file(path: &std::path::Path) -> Option<Module> {
             .collect();
         if !children.is_empty() {
             meta.children = Some(children);
+        }
+    }
+
+    if meta.links.is_none() {
+        let links: Vec<String> = body
+            .lines()
+            .filter(|l| l.trim().starts_with("- link:"))
+            .map(|l| l.trim().trim_start_matches("- link:").trim().to_string())
+            .collect();
+        if !links.is_empty() {
+            meta.links = Some(links);
         }
     }
 

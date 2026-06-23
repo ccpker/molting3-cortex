@@ -115,13 +115,19 @@ export async function loadAll(): Promise<InitResult> {
   }
 
   // ─── 生产模式（Tauri） ───
-  // 1. 扫描物理模块目录（dev: 项目 local modules/, prod: 配置路径）
-  const modulesDir = "modules"; // dev 默认值，prod 从配置读取
+  // 1. 扫描物理模块目录
+  //    Tauri dev CWD = 项目根，用相对路径；否则用环境变量
   let modules: Module[] = [];
   try {
+    // 优先从环境变量读取模块目录，次用相对路径
+    const modulesDir = (window as any).__MODULES_DIR__ || "modules";
+    console.log(`[loader] scanning modules from: ${modulesDir}`);
     modules = await scanModules(modulesDir);
-  } catch {
-    console.warn(`scan_modules(${modulesDir}) failed, continuing with empty modules`);
+    console.log(`[loader] scanModules returned ${modules.length} modules`);
+  } catch (e) {
+    console.warn(`scanModules failed, falling back to dev data:`, e);
+    // 降级到 dev-modules（Tauri 启动失败时可用）
+    modules = DEV_MODULES;
   }
 
   // 2. 加载视图定义（从 views/ 目录 .md 文件）
