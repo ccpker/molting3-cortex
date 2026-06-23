@@ -66,3 +66,35 @@ export async function queryDeps(moduleId: string): Promise<DepQuery> {
 export async function queryAffected(moduleId: string): Promise<AffectedResult> {
   return invoke<AffectedResult>("query_affected", { moduleId });
 }
+
+// ─── 依赖图变更 ───
+
+export interface GraphDiff {
+  added: DepNode[];
+  removed: DepNode[];
+  changed: DepNode[];
+}
+
+export interface RebuildResult {
+  moduleCount: number;
+  added: number;
+  removed: number;
+  changed: number;
+}
+
+/** 监听依赖图变更事件 */
+export function onGraphChanged(callback: (diff: GraphDiff) => void): Promise<() => void> {
+  return listen<GraphDiff>("graph-changed", (event) => {
+    callback(event.payload);
+  });
+}
+
+/** 重建依赖图（文件变化后调用） */
+export async function rebuildGraph(): Promise<RebuildResult> {
+  return invoke<RebuildResult>("rebuild_graph");
+}
+
+/** 查询依赖图统计 */
+export async function depStats(): Promise<{ moduleCount: number }> {
+  return invoke<{ moduleCount: number }>("dep_stats");
+}

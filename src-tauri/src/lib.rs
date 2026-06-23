@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 mod watcher;
 mod dep_graph;
@@ -95,7 +95,6 @@ fn scan_md_files(dir: &std::path::Path, modules: &mut Vec<Module>) -> Result<(),
     Ok(())
 }
 
-/// 解析单个 .md 文件为 Module
 fn parse_module_file(path: &std::path::Path) -> Option<Module> {
     let content = std::fs::read_to_string(path).ok()?;
 
@@ -423,6 +422,39 @@ fn dep_stats(
     }))
 }
 
+/// 重建依赖图（文件变化后调用）并推送差异事件
+#[tauri::command]
+fn rebuild_graph(
+    app: tauri::AppHandle,
+    graph: tauri::State<'_, Mutex<dep_graph::DepGraph>>,
+) -> Result<serde_json::Value, String> {
+    let modules_dir = std::path::PathBuf::from(
+        "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules"
+    );
+    if !modules_dir.exists() {
+        return Err("modules dir not found".into());
+    }
+    let mut modules = Vec::new();
+    scan_md_files(&modules_dir, &mut modules).ok();
+    let new_graph = dep_graph::DepGraph::build(&modules);
+
+    let mut old = graph.lock().map_err(|e| e.to_string())?;
+    let diff = new_graph.diff(&old);
+
+    // 推送变更事件到前端
+    let _ = app.emit("graph-changed", &diff);
+
+    // 替换旧图
+    *old = new_graph;
+
+    Ok(serde_json::json!({
+        "moduleCount": old.module_count(),
+        "added": diff.added.len(),
+        "removed": diff.removed.len(),
+        "changed": diff.changed.len(),
+    }))
+}
+
 // ─── 应用入口 ───
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -436,6 +468,7 @@ pub fn run() {
             query_deps,
             query_affected,
             dep_stats,
+            rebuild_graph,
         ])
         .setup(|app| {
             // 构建全局依赖图（通过 scan_modules 的结果初始化）

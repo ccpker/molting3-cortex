@@ -4,9 +4,10 @@ import { ArrowLeft, LayoutDashboard, RefreshCw, Eye, EyeOff } from "lucide-react
 interface TopBarProps {
   watcherActive?: boolean;
   changeCount?: number;
+  graphDiff?: { added: number; removed: number; changed: number } | null;
 }
 
-export default function TopBar({ watcherActive, changeCount }: TopBarProps) {
+export default function TopBar({ watcherActive, changeCount, graphDiff }: TopBarProps) {
   const activeBullet = useAppStore((s) => s.activeBullet);
   const bullets = useAppStore((s) => s.bullets);
   const setActiveBullet = useAppStore((s) => s.setActiveBullet);
@@ -32,23 +33,33 @@ export default function TopBar({ watcherActive, changeCount }: TopBarProps) {
 
       <div className="flex-1" />
 
-      {/* 文件监听指示器 */}
+      {/* 文件监听 + 依赖图变更 */}
       {watcherActive !== undefined && (
-        <span
-          className={`flex items-center gap-1 text-xs ${
-            watcherActive ? "text-green-500" : "text-red-400"
-          }`}
-          title={watcherActive ? "文件监听中" : "监听未连接"}
-        >
-          {watcherActive ? (
-            <Eye className="w-3 h-3" />
-          ) : (
-            <EyeOff className="w-3 h-3" />
+        <>
+          {graphDiff && (graphDiff.added > 0 || graphDiff.removed > 0 || graphDiff.changed > 0) && (
+            <span
+              className="text-xs text-amber-400 animate-pulse font-mono"
+              title="依赖图已更新"
+            >
+              +{graphDiff.added} −{graphDiff.removed} ≈{graphDiff.changed}
+            </span>
           )}
-          {typeof changeCount === "number" && changeCount > 0 && (
-            <span className="text-[var(--color-text-muted)]">{changeCount}</span>
-          )}
-        </span>
+          <span
+            className={`flex items-center gap-1 text-xs ${
+              watcherActive ? "text-green-500" : "text-red-400"
+            }`}
+            title={watcherActive ? "文件监听中" : "监听未连接"}
+          >
+            {watcherActive ? (
+              <Eye className="w-3 h-3" />
+            ) : (
+              <EyeOff className="w-3 h-3" />
+            )}
+            {typeof changeCount === "number" && changeCount > 0 && (
+              <span className="text-[var(--color-text-muted)]">{changeCount}</span>
+            )}
+          </span>
+        </>
       )}
 
       <span className="text-xs text-[var(--color-text-muted)]">{bullets.length} 颗子弹</span>

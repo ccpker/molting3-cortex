@@ -175,6 +175,36 @@ impl DepGraph {
     pub fn module_count(&self) -> usize {
         self.titles.len()
     }
+
+    /// 与旧图对比，返回变更摘要
+    pub fn diff(&self, old: &DepGraph) -> GraphDiff {
+        let mut added = Vec::new();
+        let mut removed = Vec::new();
+        let mut changed = Vec::new();
+
+        for (id, title) in &self.titles {
+            if !old.titles.contains_key(id) {
+                added.push(DepNode { id: id.clone(), title: title.clone() });
+            } else {
+                // 检查 children/links 是否变了
+                let old_children = old.children.get(id).cloned().unwrap_or_default();
+                let new_children = self.children.get(id).cloned().unwrap_or_default();
+                let old_links = old.links.get(id).cloned().unwrap_or_default();
+                let new_links = self.links.get(id).cloned().unwrap_or_default();
+                if old_children != new_children || old_links != new_links || old.titles.get(id) != Some(title) {
+                    changed.push(DepNode { id: id.clone(), title: title.clone() });
+                }
+            }
+        }
+        for id in old.titles.keys() {
+            if !self.titles.contains_key(id) {
+                let title = old.titles.get(id).cloned().unwrap_or_else(|| id.clone());
+                removed.push(DepNode { id: id.clone(), title });
+            }
+        }
+
+        GraphDiff { added, removed, changed }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -182,4 +212,12 @@ impl DepGraph {
 pub struct AffectedResult {
     pub source: String,
     pub affected: Vec<DepNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphDiff {
+    pub added: Vec<DepNode>,
+    pub removed: Vec<DepNode>,
+    pub changed: Vec<DepNode>,
 }
