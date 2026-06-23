@@ -3,7 +3,9 @@ import { useAppStore } from "@/lib/store";
 import { loadAll } from "@/lib/loader";
 import { onFileChange, onGraphChanged, rebuildGraph } from "@/lib/tauri-api";
 import type { FileChangeEvent } from "@/lib/tauri-api";
+import { pushFileChange, pushGraphResult } from "@/components/panes/ChangeTimeline";
 import DashboardView from "@/components/panes/DashboardView";
+import ChangeTimeline from "@/components/panes/ChangeTimeline";
 import BulletView from "@/components/panes/BulletView";
 import TopBar from "@/components/TopBar";
 
@@ -66,6 +68,7 @@ function App() {
       onFileChange((ev) => {
         console.log(`[watcher] ${ev.kind}: ${ev.path}`);
         addChange(ev);
+        pushFileChange({ path: ev.path, kind: ev.kind as "modified" | "created" | "removed" });
         scheduleRebuild();
       }).then((fn) => {
         unlistenFile = fn;
@@ -76,12 +79,20 @@ function App() {
       });
 
       onGraphChanged((diff) => {
+        // 推入 timeline
+        pushGraphResult(
+          0, // moduleCount 未知（事件中未携带），用 0 占位
+          diff.added.length,
+          diff.removed.length,
+          diff.changed.length
+        );
+        // TopBar 高亮
         setGraphDiff({
           added: diff.added.length,
           removed: diff.removed.length,
           changed: diff.changed.length,
         });
-        // 5s 后自动清除 diff 高亮
+        // 5s 后清除 TopBar diff 高亮
         setTimeout(() => setGraphDiff(null), 5000);
       }).then((fn) => {
         unlistenGraph = fn;
@@ -104,6 +115,7 @@ function App() {
         {loading && <Splash text="🧠 loading..." />}
         {error && <Splash text={`⚠️ ${error}`} />}
         {!loading && !error && viewMode === "dashboard" && <DashboardView />}
+        {!loading && !error && viewMode === "timeline" && <ChangeTimeline />}
         {!loading && !error && viewMode === "bullet" && <BulletView />}
       </main>
     </div>

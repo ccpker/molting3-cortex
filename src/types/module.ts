@@ -71,7 +71,7 @@ export interface LiveScan {
 }
 
 // ─── 应用状态（zustand store） ───
-export type ViewMode = "dashboard" | "bullet" | "editor";
+export type ViewMode = "dashboard" | "bullet" | "editor" | "timeline";
 
 export interface AppState {
   viewMode: ViewMode;

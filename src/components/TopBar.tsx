@@ -1,5 +1,5 @@
 import { useAppStore } from "@/lib/store";
-import { ArrowLeft, LayoutDashboard, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, RefreshCw, Eye, EyeOff, History } from "lucide-react";
 
 interface TopBarProps {
   watcherActive?: boolean;
@@ -9,12 +9,14 @@ interface TopBarProps {
 
 export default function TopBar({ watcherActive, changeCount, graphDiff }: TopBarProps) {
   const activeBullet = useAppStore((s) => s.activeBullet);
+  const viewMode = useAppStore((s) => s.viewMode);
   const bullets = useAppStore((s) => s.bullets);
   const setActiveBullet = useAppStore((s) => s.setActiveBullet);
+  const setViewMode = useAppStore((s) => s.setViewMode);
 
   return (
     <header className="flex items-center gap-3 px-4 py-2 bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0 select-none">
-      {/* 面包屑 */}
+      {/* 面包屑 + 视图切换 */}
       {activeBullet ? (
         <button
           className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
@@ -25,10 +27,30 @@ export default function TopBar({ watcherActive, changeCount, graphDiff }: TopBar
           <span className="text-[var(--color-accent)]">/ {activeBullet}</span>
         </button>
       ) : (
-        <span className="text-sm font-semibold text-[var(--color-text)] flex items-center gap-2">
-          <LayoutDashboard className="w-4 h-4 text-[var(--color-accent)]" />
-          molting3 中枢
-        </span>
+        <div className="flex items-center gap-1 bg-[var(--color-bg)] rounded-md p-0.5">
+          <button
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-all ${
+              viewMode === "dashboard"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            }`}
+            onClick={() => setViewMode("dashboard")}
+          >
+            <LayoutDashboard className="w-3 h-3" />
+            项目
+          </button>
+          <button
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-all ${
+              viewMode === "timeline"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            }`}
+            onClick={() => setViewMode("timeline")}
+          >
+            <History className="w-3 h-3" />
+            变化
+          </button>
+        </div>
       )}
 
       <div className="flex-1" />
