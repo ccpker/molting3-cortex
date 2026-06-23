@@ -1,7 +1,8 @@
 // 初始化载入 — 应用启动时加载模块和实时数据
-import { scanModules, scanLive } from "@/lib/tauri-api";
-import type { Module, View, LiveScan } from "@/types/module";
+import type { View } from "@/types/module";
+import type { Module, LiveScan } from "@/types/module";
 import { DEV_MODULES } from "@/lib/dev-modules";
+import { scanModules } from "@/lib/tauri-api";
 
 export interface InitResult {
   modules: Module[];
@@ -100,12 +101,13 @@ const DEV_VIEW_WEATHER: View = {
  * 生产模式（Tauri）：扫描物理目录
  */
 export async function loadAll(): Promise<InitResult> {
-  // 检测是否有 Tauri API 可用
+  // Tauri 2.0 检测：__TAURI_INTERNALS__ 全局变量
+  // (Tauri 1.0 用 __TAURI__，本项目是 Tauri 2.0)
   const hasTauri = typeof window !== "undefined"
-    && "__TAURI__" in window;
+    && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
   if (!hasTauri) {
-    console.log("[loader] dev mode — using precompiled DEV_MODULES (" + DEV_MODULES.length + " modules)");
+    console.log("[loader] browser mode — no Tauri runtime, using DEV_MODULES (" + DEV_MODULES.length + " modules)");
     return {
       modules: DEV_MODULES,
       views: [DEV_VIEW_PROJECTS, DEV_VIEW_WEATHER],
@@ -114,46 +116,35 @@ export async function loadAll(): Promise<InitResult> {
     };
   }
 
-  // ─── 生产模式（Tauri） ───
-  // 1. 扫描物理模块目录
-  //    Tauri dev CWD = 项目根，用相对路径；否则用环境变量
+  // ─── Tauri 生产模式：Rust 真扫描 ───
+  console.log("[loader] Tauri v2 detected, starting scan pipeline");
+
+  // 1. 扫描模块 — 使用绝对路径，防止 CWD 不在项目根
+  //    加 5s 超时：Rust 崩了不会永久挂起前端
+  const moduleRoot = "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules";
+  console.log(`[loader] scanModules dir: ${moduleRoot}`);
   let modules: Module[] = [];
   try {
-    // 优先从环境变量读取模块目录，次用相对路径
-    const modulesDir = (window as any).__MODULES_DIR__ || "modules";
-    console.log(`[loader] scanning modules from: ${modulesDir}`);
-    modules = await scanModules(modulesDir);
-    console.log(`[loader] scanModules returned ${modules.length} modules`);
-  } catch (e) {
-    console.warn(`scanModules failed, falling back to dev data:`, e);
-    // 降级到 dev-modules（Tauri 启动失败时可用）
+    const t0 = performance.now();
+    modules = await Promise.race([
+      scanModules(moduleRoot),
+      new Promise<Module[]>((_, rej) =>
+        setTimeout(() => rej(new Error("scanModules 5s timeout")), 5000)
+      ),
+    ]);
+    const t1 = performance.now();
+    console.log(`[loader] scanModules OK — ${modules.length} modules in ${(t1 - t0).toFixed(0)}ms`);
+  } catch (e: any) {
+    console.error(`[loader] scanModules FAILED:`, e?.message ?? e);
+    console.log("[loader] falling back to DEV_MODULES");
     modules = DEV_MODULES;
   }
 
-  // 2. 加载视图定义（从 views/ 目录 .md 文件）
-  let views: View[] = [DEV_VIEW_PROJECTS, DEV_VIEW_WEATHER];
-  try {
-    // TODO: 从 views/ 目录读取视图定义
-  } catch {
-    console.warn("view loading failed, using default");
-  }
+  // 2. 视图定义（TODO: 从 views/ 目录扫描）
+  const views: View[] = [DEV_VIEW_PROJECTS, DEV_VIEW_WEATHER];
 
-  // 3. 扫描 live 状态 — 从 Z:\molting3 读取子弹实时数据
-  const molting3Root = "Z:\\molting3";
-  let liveScans: LiveScan[] = [];
-  try {
-    liveScans = await scanLive(molting3Root);
-  } catch {
-    // molting3 目录不存在时静默降级
-    console.warn(`molting3 root not found at ${molting3Root}, live scan skipped`);
-  }
+  // 3. Live scan (TODO: 启用 scan_live)
+  const liveScans: LiveScan[] = [];
 
-  // 4. 从 live scan + modules 合并子弹名
-  const bulletNames = new Set<string>();
-  liveScans.forEach((s) => bulletNames.add(s.bullet));
-  modules.forEach((m) => {
-    if (m.meta.bullet) bulletNames.add(m.meta.bullet);
-  });
-
-  return { modules, views, bulletNames: Array.from(bulletNames), liveScans };
+  return { modules, views, bulletNames: ["编程主管", "米豆天气"], liveScans };
 }

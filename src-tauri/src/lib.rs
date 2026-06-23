@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use tauri;
+use tauri::Manager;
+
+mod watcher;
 
 // ─── 数据结构（与前端 types/module.ts 对齐） ───
 
@@ -42,6 +46,15 @@ pub struct LiveScan {
 pub struct RecentFile {
     pub path: String,
     pub updated: String,
+}
+
+// ─── 文件监听 ───
+
+/// 文件变更事件，通过 Tauri event 推送到前端
+#[derive(Debug, Clone, Serialize)]
+pub struct FileChangeEvent {
+    pub path: String,
+    pub kind: String,  // "created" | "modified" | "removed"
 }
 
 // ─── Tauri 命令 ───
@@ -389,6 +402,25 @@ pub fn run() {
             write_module,
             scan_live,
         ])
+        .setup(|app| {
+            // 启动模块文件监听
+            let watch_dir = std::path::PathBuf::from(
+                "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules"
+            );
+            if watch_dir.exists() {
+                match watcher::start_watching(&app.handle(), watch_dir) {
+                    Ok(guard) => {
+                        // 把 guard 泄漏给 app 管理
+                        app.manage(Mutex::new(Some(guard)));
+                        println!("[watcher] started");
+                    }
+                    Err(e) => eprintln!("[watcher] failed to start: {}", e),
+                }
+            } else {
+                eprintln!("[watcher] modules dir not found");
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

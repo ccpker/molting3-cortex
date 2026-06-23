@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { loadAll } from "@/lib/loader";
+import { onFileChange } from "@/lib/tauri-api";
+import type { FileChangeEvent } from "@/lib/tauri-api";
 import DashboardView from "@/components/panes/DashboardView";
 import BulletView from "@/components/panes/BulletView";
 import TopBar from "@/components/TopBar";
@@ -12,6 +14,13 @@ function App() {
   const setBullets = useAppStore((s) => s.setBullets);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 文件变更记录 — 最近 20 条
+  const [changes, setChanges] = useState<FileChangeEvent[]>([]);
+  const [watcherActive, setWatcherActive] = useState(false);
+  const addChange = (ev: FileChangeEvent) => {
+    setChanges((prev) => [ev, ...prev].slice(0, 20));
+  };
 
   useEffect(() => {
     loadAll()
@@ -28,9 +37,33 @@ function App() {
       });
   }, []);
 
+  // 文件监听
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const hasTauri = typeof window !== "undefined"
+      && "__TAURI_INTERNALS__" in window;
+
+    if (hasTauri) {
+      onFileChange((ev) => {
+        console.log(`[watcher] ${ev.kind}: ${ev.path}`);
+        addChange(ev);
+      }).then((fn) => {
+        unlisten = fn;
+        setWatcherActive(true);
+        console.log("[watcher] listener registered");
+      }).catch((err) => {
+        console.warn("[watcher] failed to register:", err);
+      });
+    }
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg)]">
-      <TopBar />
+      <TopBar watcherActive={watcherActive} changeCount={changes.length} />
       <main className="flex-1 overflow-hidden">
         {loading && <Splash text="🧠 loading..." />}
         {error && <Splash text={`⚠️ ${error}`} />}
