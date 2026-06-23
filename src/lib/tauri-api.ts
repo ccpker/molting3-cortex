@@ -35,3 +35,34 @@ export function onFileChange(callback: (ev: FileChangeEvent) => void): Promise<(
     callback(event.payload);
   });
 }
+
+// ─── 依赖图查询 ───
+
+export interface DepNode {
+  id: string;
+  title: string;
+}
+
+export interface DepQuery {
+  moduleId: string;
+  title: string;
+  dependsOn: DepNode[];
+  dependedBy: DepNode[];
+  children: DepNode[];
+  linkedTo: DepNode[];
+}
+
+export interface AffectedResult {
+  source: string;
+  affected: DepNode[];
+}
+
+/** 查询模块依赖关系 */
+export async function queryDeps(moduleId: string): Promise<DepQuery> {
+  return invoke<DepQuery>("query_deps", { moduleId });
+}
+
+/** 查询"改了此模块会影响到谁" */
+export async function queryAffected(moduleId: string): Promise<AffectedResult> {
+  return invoke<AffectedResult>("query_affected", { moduleId });
+}

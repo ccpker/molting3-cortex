@@ -4,6 +4,7 @@ use tauri;
 use tauri::Manager;
 
 mod watcher;
+mod dep_graph;
 
 // ─── 数据结构（与前端 types/module.ts 对齐） ───
 
@@ -391,6 +392,37 @@ fn is_leap(y: i64) -> bool {
     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
 
+/// 查询模块依赖关系
+#[tauri::command]
+fn query_deps(
+    module_id: String,
+    graph: tauri::State<'_, Mutex<dep_graph::DepGraph>>,
+) -> Result<dep_graph::DepQuery, String> {
+    let g = graph.lock().map_err(|e| e.to_string())?;
+    g.query(&module_id).ok_or_else(|| format!("Module not found: {}", module_id))
+}
+
+/// 查询"改了此模块会影响到谁"
+#[tauri::command]
+fn query_affected(
+    module_id: String,
+    graph: tauri::State<'_, Mutex<dep_graph::DepGraph>>,
+) -> Result<dep_graph::AffectedResult, String> {
+    let g = graph.lock().map_err(|e| e.to_string())?;
+    Ok(g.affected(&module_id))
+}
+
+/// 获取依赖图统计
+#[tauri::command]
+fn dep_stats(
+    graph: tauri::State<'_, Mutex<dep_graph::DepGraph>>,
+) -> Result<serde_json::Value, String> {
+    let g = graph.lock().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "moduleCount": g.module_count(),
+    }))
+}
+
 // ─── 应用入口 ───
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -401,16 +433,33 @@ pub fn run() {
             scan_modules,
             write_module,
             scan_live,
+            query_deps,
+            query_affected,
+            dep_stats,
         ])
         .setup(|app| {
-            // 启动模块文件监听
-            let watch_dir = std::path::PathBuf::from(
+            // 构建全局依赖图（通过 scan_modules 的结果初始化）
+            let modules_dir = std::path::PathBuf::from(
                 "D:\\workspaces\\dev\\projects\\molting3-cortex\\modules"
             );
-            if watch_dir.exists() {
-                match watcher::start_watching(&app.handle(), watch_dir) {
+            if modules_dir.exists() {
+                // 启动时扫描一次，构建依赖图
+                if let Ok(file_modules) = scan_modules(
+                    modules_dir.to_string_lossy().to_string()
+                ) {
+                    let graph = dep_graph::DepGraph::build(&file_modules);
+                    println!(
+                        "[dep_graph] built with {} modules",
+                        graph.module_count()
+                    );
+                    app.manage(Mutex::new(graph));
+                }
+            }
+
+            // 启动文件监听
+            if modules_dir.exists() {
+                match watcher::start_watching(&app.handle(), modules_dir.clone()) {
                     Ok(guard) => {
-                        // 把 guard 泄漏给 app 管理
                         app.manage(Mutex::new(Some(guard)));
                         println!("[watcher] started");
                     }
